@@ -21,22 +21,24 @@ git clone https://github.com/Comfy-Org/ComfyUI-Manager.git
 # Return to ComfyUI directory
 cd .. || { echo "Failed to cd to ComfyUI"; exit 1; }
 
-# Download and install cloudflared
-wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-sudo dpkg -i cloudflared-linux-amd64.deb
+# Download and set up ngrok
+echo "Downloading ngrok..."
+wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
+tar -xzf ngrok-v3-stable-linux-amd64.tgz
+chmod +x ngrok
 
-# Start cloudflared tunnel in the background
-echo "Starting cloudflared tunnel..."
-cloudflared tunnel --url http://127.0.0.1:8188 > cloudflared.log 2>&1 &
-CLOUDFLARED_PID=$!
+# Start ngrok tunnel in the background
+echo "Starting ngrok tunnel..."
+./ngrok http 8188 > ngrok.log 2>&1 &
+NGROK_PID=$!
 
-# Wait for cloudflared to initialize and extract URL
-echo "Waiting for cloudflared URL..."
+# Wait for ngrok to initialize and extract URL
+echo "Waiting for ngrok URL..."
 i=0
 while [ "$i" -lt 30 ]; do
     sleep 2
-    if grep -q "trycloudflare.com" cloudflared.log; then
-        URL=$(grep "trycloudflare.com" cloudflared.log | awk '{print $NF}' | head -1)
+    if grep -q "https://.*.ngrok-free.app" ngrok.log; then
+        URL=$(grep "https://.*.ngrok-free.app" ngrok.log | awk '{print $NF}' | head -1)
         echo "This is the URL to access ComfyUI: $URL"
         break
     fi
