@@ -1,5 +1,12 @@
 #!/bin/sh
 
+# Configuration for reverse SSH (CUSTOMIZE THESE)
+SERVER="YOUR_SERVER"          # Public server IP or hostname (e.g., 203.0.113.1)
+USER="YOUR_USER"              # SSH user on public server (e.g., ubuntu)
+PUBLIC_PORT="8080"            # Port on public server to forward (e.g., 8080)
+LOCAL_PORT="8188"             # Local ComfyUI port (default: 8188)
+SSH_KEY="~/.ssh/id_rsa"       # Path to SSH private key (or leave empty if using password)
+
 # Clone ComfyUI repository
 git clone https://github.com/comfyanonymous/ComfyUI.git
 
@@ -21,29 +28,36 @@ git clone https://github.com/Comfy-Org/ComfyUI-Manager.git
 # Return to ComfyUI directory
 cd .. || { echo "Failed to cd to ComfyUI"; exit 1; }
 
-# Download and set up ngrok
-echo "Downloading ngrok..."
-wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
-tar -xzf ngrok-v3-stable-linux-amd64.tgz
-chmod +x ngrok
+# Start reverse SSH tunnel in the background
+echo "Starting reverse SSH tunnel to $SERVER..."
+if [ -n "$SSH_KEY" ]; then
+    ssh -f -N -R "$PUBLIC_PORT:localhost:$LOCAL_PORT" "$USER@$SERVER" -i "$SSH_KEY" || {
+        echo "Failed to start SSH tunnel"; exit 1;
+    }
+else
+    ssh -f -N -R "$PUBLIC_PORT:localhost:$LOCAL_PORT" "$USER@$SERVER" || {
+        echo "Failed to start SSH tunnel"; exit 1;
+    }
+fi
+SSH_PID=$!
 
-# Start ngrok tunnel in the background
-echo "Starting ngrok tunnel..."
-./ngrok http 8188 > ngrok.log 2>&1 &
-NGROK_PID=$!
-
-# Wait for ngrok to initialize and extract URL
-echo "Waiting for ngrok URL..."
+# Verify tunnel is running
+echo "Verifying SSH tunnel..."
 i=0
-while [ "$i" -lt 30 ]; do
-    sleep 2
-    if grep -q "https://.*.ngrok-free.app" ngrok.log; then
-        URL=$(grep "https://.*.ngrok-free.app" ngrok.log | awk '{print $NF}' | head -1)
-        echo "This is the URL to access ComfyUI: $URL"
+while [ "$i" -lt 10 ]; do
+    sleep 1
+    if ps | grep "$SSH_PID" | grep -q ssh; then
+        echo "SSH tunnel established."
+        echo "Access ComfyUI at: http://$SERVER:$PUBLIC_PORT"
         break
     fi
     i=$((i + 1))
 done
+if [ "$i" -eq 10 ]; then
+    echo "SSH tunnel failed to start. Check SSH configuration."
+    exit 1
+fi
 
 # Start ComfyUI
+echo "Starting ComfyUI..."
 python main.py --dont-print-server
